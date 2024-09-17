@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Four-Lane Multi-Input Game</title>
+    <title>Four-Lane Fair Path Game</title>
     <style>
         body, html {
             margin: 0;
@@ -36,13 +36,7 @@
             padding: 20px;
             border-radius: 10px;
         }
-        #mobileControls {
-            display: none;
-            width: 100%;
-            justify-content: space-around;
-            margin-top: 10px;
-        }
-        #mobileControls button, #gameOver button {
+        #gameOver button {
             font-size: 24px;
             padding: 10px 20px;
             margin: 5px;
@@ -52,10 +46,6 @@
 <body>
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
-        <div id="mobileControls">
-            <button id="leftButton">←</button>
-            <button id="rightButton">→</button>
-        </div>
     </div>
     <div id="gameOver">
         <h2>Game Over</h2>
@@ -68,13 +58,13 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const gameContainer = document.getElementById('gameContainer');
-        const mobileControls = document.getElementById('mobileControls');
 
         let player, obstacles, powerUps, score, level, speed, gameLoop, powerUpTimer, obstacleTimer;
         let gameWidth, gameHeight, laneWidth;
         const LANES = 4;
         const BLOCK_SIZE = 60; // Fixed size for obstacles
         let speedMultiplier = 1;
+        let lastObstacleLane = -1; // To track the last obstacle's lane
 
         function resizeGame() {
             const containerWidth = gameContainer.clientWidth;
@@ -98,11 +88,6 @@
             player.width = laneWidth * 0.8;
             player.height = gameHeight * 0.05;
             player.y = gameHeight - player.height - gameHeight * 0.05;
-
-            // Show mobile controls on touch devices
-            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-                mobileControls.style.display = 'flex';
-            }
         }
 
         function initGame() {
@@ -113,6 +98,7 @@
             level = 1;
             speed = 2;
             speedMultiplier = 1;
+            lastObstacleLane = -1;
 
             resizeGame();
             player.x = (laneWidth - player.width) / 2;
@@ -161,7 +147,12 @@
         }
 
         function createObstacle() {
-            const lane = Math.floor(Math.random() * LANES);
+            let lane;
+            do {
+                lane = Math.floor(Math.random() * LANES);
+            } while (lane === lastObstacleLane);
+            
+            lastObstacleLane = lane;
             const color = `#${Math.floor(Math.random()*16777215).toString(16)}`;
             
             obstacles.push({
@@ -340,16 +331,6 @@
         document.addEventListener('keydown', handleKeyPress);
         canvas.addEventListener('click', handleMouseClick);
         canvas.addEventListener('touchstart', handleTouchStart);
-
-        // Mobile controls (kept for backwards compatibility)
-        document.getElementById('leftButton').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            movePlayer('left');
-        });
-        document.getElementById('rightButton').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            movePlayer('right');
-        });
 
         initGame();
         startGame();
