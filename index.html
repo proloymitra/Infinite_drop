@@ -1,234 +1,234 @@
-<!doctype html>
-<html ⚡>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>AMP Infinite Runner Game</title>
-  <link rel="canonical" href="https://example.com/game">
-  <meta name="viewport" content="width=device-width,minimum-scale=1,initial-scale=1">
-  <script async src="https://cdn.ampproject.org/v0.js"></script>
-  <script async custom-element="amp-script" src="https://cdn.ampproject.org/v0/amp-script-0.1.js"></script>
-  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
-  <style amp-custom>
-    body { margin: 0; padding: 0; }
-    #gameWrapper { position: relative; width: 100vw; height: 100vh; }
-    #gameCanvas { display: block; width: 100%; height: 100%; }
-    #restartButton {
-      position: absolute;
-      left: 50%;
-      top: 60%;
-      transform: translate(-50%, -50%);
-      font-size: 20px;
-      padding: 10px 20px;
-      display: none;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sphere Runner Game</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            touch-action: none;
+        }
+        #restartButton {
+            position: absolute;
+            left: 50%;
+            top: 60%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            padding: 10px 20px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <amp-script layout="container" src="https://example.com/game-script.js" width="100vw" height="100vh">
-    <div id="gameWrapper">
-      <canvas id="gameCanvas"></canvas>
-      <button id="restartButton">Restart Game</button>
-    </div>
-  </amp-script>
+    <canvas id="gameCanvas"></canvas>
+    <button id="restartButton">Restart Game</button>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const restartButton = document.getElementById('restartButton');
 
-  <script type="text/plain" target="amp-script">
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const restartButton = document.getElementById('restartButton');
+        const LANE_COUNT = 3;
+        let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT, OBSTACLE_WIDTH;
 
-    const LANE_COUNT = 3;
-    let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT, OBSTACLE_WIDTH;
+        let player = {
+            lane: 1,
+            y: 0,
+            radius: 0
+        };
 
-    let player = {
-      lane: 1,
-      y: 0,
-      width: 0,
-      height: 0
-    };
+        let obstacles = [];
+        let score = 0;
+        let level = 1;
+        let gameSpeed = 10;
+        let objectsEvaded = 0;
+        let isGameOver = false;
 
-    let obstacles = [];
-    let score = 0;
-    let level = 1;
-    let gameSpeed = 10;
-    let objectsEvaded = 0;
-    let isGameOver = false;
+        const obstacleColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
 
-    const obstacleColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
-
-    function resizeCanvas() {
-      const wrapper = document.getElementById('gameWrapper');
-      canvas.width = wrapper.clientWidth;
-      canvas.height = wrapper.clientHeight;
-      
-      LANE_WIDTH = canvas.width / LANE_COUNT;
-      PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.height * 0.08);
-      OBSTACLE_HEIGHT = canvas.height * 0.1;
-      OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
-      player.y = canvas.height - PLAYER_SIZE * 1.5;
-      
-      player.width = PLAYER_SIZE;
-      player.height = PLAYER_SIZE;
-    }
-
-    function drawPlayer() {
-      ctx.fillStyle = '#3498db';
-      ctx.fillRect(
-        player.lane * LANE_WIDTH + (LANE_WIDTH - player.width) / 2,
-        player.y,
-        player.width,
-        player.height
-      );
-    }
-
-    function drawObstacles() {
-      obstacles.forEach(obstacle => {
-        ctx.fillStyle = obstacle.color;
-        ctx.fillRect(
-          obstacle.lane * LANE_WIDTH + (LANE_WIDTH - OBSTACLE_WIDTH) / 2,
-          obstacle.y,
-          OBSTACLE_WIDTH,
-          OBSTACLE_HEIGHT
-        );
-      });
-    }
-
-    function moveObstacles() {
-      obstacles.forEach(obstacle => {
-        obstacle.y += gameSpeed;
-      });
-      
-      obstacles = obstacles.filter(obstacle => obstacle.y < canvas.height);
-    }
-
-    function createObstacle() {
-      if (obstacles.length === 0 || obstacles[obstacles.length - 1].y > canvas.height * 0.2) {
-        const lane = Math.floor(Math.random() * LANE_COUNT);
-        obstacles.push({
-          lane: lane,
-          y: -OBSTACLE_HEIGHT,
-          color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
-        });
-      }
-    }
-
-    function checkCollision() {
-      for (let obstacle of obstacles) {
-        if (
-          player.lane === obstacle.lane &&
-          player.y < obstacle.y + OBSTACLE_HEIGHT &&
-          player.y + player.height > obstacle.y
-        ) {
-          return true;
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            if (canvas.width > canvas.height) {
+                // Landscape orientation
+                LANE_WIDTH = canvas.width / LANE_COUNT;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.height * 0.08);
+                OBSTACLE_HEIGHT = canvas.height * 0.1;
+                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
+                player.y = canvas.height - PLAYER_SIZE * 1.5;
+            } else {
+                // Portrait orientation
+                LANE_WIDTH = canvas.width / LANE_COUNT;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.width * 0.08);
+                OBSTACLE_HEIGHT = canvas.width * 0.1;
+                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
+                player.y = canvas.height - PLAYER_SIZE * 1.5;
+            }
+            
+            player.radius = PLAYER_SIZE / 2;
         }
-      }
-      return false;
-    }
 
-    function updateGame() {
-      if (isGameOver) return;
+        function drawPlayer() {
+            ctx.beginPath();
+            ctx.arc(player.lane * LANE_WIDTH + LANE_WIDTH / 2, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#3498db';
+            ctx.fill();
+            ctx.strokeStyle = '#2980b9';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      drawPlayer();
-      createObstacle();
-      moveObstacles();
-      drawObstacles();
-      
-      if (checkCollision()) {
-        gameOver();
-        return;
-      }
-      
-      objectsEvaded += obstacles.filter(obstacle => obstacle.y > player.y).length;
-      obstacles = obstacles.filter(obstacle => obstacle.y <= player.y);
-      
-      if (objectsEvaded >= 10) {
-        level++;
-        objectsEvaded = 0;
-        gameSpeed += 0.5;
-      }
-      
-      score++;
-      
-      ctx.fillStyle = 'black';
-      ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
-      ctx.fillText(`Score: ${score}  Level: ${level}`, 10, 30);
-      
-      requestAnimationFrame(updateGame);
-    }
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                ctx.fillStyle = obstacle.color;
+                ctx.beginPath();
+                ctx.moveTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH - OBSTACLE_WIDTH) / 2, obstacle.y);
+                ctx.lineTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH + OBSTACLE_WIDTH) / 2, obstacle.y);
+                ctx.lineTo(obstacle.lane * LANE_WIDTH + LANE_WIDTH / 2, obstacle.y + OBSTACLE_HEIGHT);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+        }
 
-    function gameOver() {
-      isGameOver = true;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.fillStyle = 'white';
-      ctx.font = `${Math.max(canvas.width, canvas.height) * 0.05}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
-      ctx.textAlign = 'left';
+        function moveObstacles() {
+            obstacles.forEach(obstacle => {
+                obstacle.y += gameSpeed;
+            });
+            
+            obstacles = obstacles.filter(obstacle => obstacle.y < canvas.height);
+        }
 
-      restartButton.style.display = 'block';
-    }
+        function createObstacle() {
+            if (obstacles.length === 0 || obstacles[obstacles.length - 1].y > canvas.height * 0.2) {
+                const lane = Math.floor(Math.random() * LANE_COUNT);
+                obstacles.push({
+                    lane: lane,
+                    y: -OBSTACLE_HEIGHT,
+                    color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
+                });
+            }
+        }
 
-    function resetGame() {
-      player.lane = 1;
-      obstacles = [];
-      score = 0;
-      level = 1;
-      gameSpeed = 10;
-      objectsEvaded = 0;
-      isGameOver = false;
-      restartButton.style.display = 'none';
-      updateGame();
-    }
+        function checkCollision() {
+            for (let obstacle of obstacles) {
+                if (
+                    player.lane === obstacle.lane &&
+                    player.y - player.radius < obstacle.y + OBSTACLE_HEIGHT &&
+                    player.y + player.radius > obstacle.y
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
-    function handleInput(x) {
-      if (isGameOver) return;
-      const laneWidth = canvas.width / LANE_COUNT;
-      const newLane = Math.floor(x / laneWidth);
-      if (Math.abs(newLane - player.lane) <= 1) {
-        player.lane = newLane;
-      }
-    }
+        function updateGame() {
+            if (isGameOver) return;
 
-    canvas.addEventListener('touchstart', (event) => {
-      event.preventDefault();
-      const touch = event.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const x = touch.clientX - rect.left;
-      handleInput(x);
-    });
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawPlayer();
+            createObstacle();
+            moveObstacles();
+            drawObstacles();
+            
+            if (checkCollision()) {
+                gameOver();
+                return;
+            }
+            
+            objectsEvaded += obstacles.filter(obstacle => obstacle.y > player.y).length;
+            obstacles = obstacles.filter(obstacle => obstacle.y <= player.y);
+            
+            if (objectsEvaded >= 10) {
+                level++;
+                objectsEvaded = 0;
+                gameSpeed += 0.5;
+            }
+            
+            score++;
+            
+            ctx.fillStyle = 'black';
+            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
+            ctx.fillText(`Score: ${score}  Level: ${level}`, 10, 30);
+            
+            requestAnimationFrame(updateGame);
+        }
 
-    canvas.addEventListener('mousedown', (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      handleInput(x);
-    });
+        function gameOver() {
+            isGameOver = true;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.05}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
+            ctx.textAlign = 'left';
 
-    document.addEventListener('keydown', (event) => {
-      if (isGameOver) return;
-      switch(event.key) {
-        case 'ArrowLeft':
-          player.lane = Math.max(0, player.lane - 1);
-          break;
-        case 'ArrowRight':
-          player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
-          break;
-      }
-    });
+            restartButton.style.display = 'block';
+        }
 
-    restartButton.addEventListener('click', resetGame);
+        function resetGame() {
+            player.lane = 1;
+            obstacles = [];
+            score = 0;
+            level = 1;
+            gameSpeed = 10;
+            objectsEvaded = 0;
+            isGameOver = false;
+            restartButton.style.display = 'none';
+            updateGame();
+        }
 
-    window.addEventListener('resize', () => {
-      resizeCanvas();
-      if (!isGameOver) {
+        function handleInput(x) {
+            if (isGameOver) return;
+            const laneWidth = canvas.width / LANE_COUNT;
+            const newLane = Math.floor(x / laneWidth);
+            if (Math.abs(newLane - player.lane) <= 1) {
+                player.lane = newLane;
+            }
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (isGameOver) return;
+            switch(event.key) {
+                case 'ArrowLeft':
+                    player.lane = Math.max(0, player.lane - 1);
+                    break;
+                case 'ArrowRight':
+                    player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
+                    break;
+            }
+        });
+
+        canvas.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            handleInput(touch.clientX);
+        });
+
+        canvas.addEventListener('mousedown', (event) => {
+            handleInput(event.clientX);
+        });
+
+        restartButton.addEventListener('click', resetGame);
+
+        window.addEventListener('resize', resizeCanvas);
+
+        resizeCanvas();
         updateGame();
-      }
-    });
-
-    resizeCanvas();
-    updateGame();
-  </script>
+    </script>
 </body>
 </html>
