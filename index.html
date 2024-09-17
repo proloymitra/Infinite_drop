@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Responsive Infinite Runner Game</title>
+    <title>Sphere Runner Game</title>
     <style>
         body, html {
             margin: 0;
@@ -16,29 +16,42 @@
             display: block;
             touch-action: none;
         }
+        #restartButton {
+            position: absolute;
+            left: 50%;
+            top: 60%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            padding: 10px 20px;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <button id="restartButton">Restart Game</button>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const restartButton = document.getElementById('restartButton');
 
         const LANE_COUNT = 3;
-        let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT;
+        let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT, OBSTACLE_WIDTH;
 
         let player = {
             lane: 1,
             y: 0,
-            width: 0,
-            height: 0
+            radius: 0
         };
 
         let obstacles = [];
         let score = 0;
         let level = 1;
-        let gameSpeed = 15;
+        let gameSpeed = 10;
         let objectsEvaded = 0;
+        let isGameOver = false;
+
+        const obstacleColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
@@ -47,30 +60,44 @@
             if (canvas.width > canvas.height) {
                 // Landscape orientation
                 LANE_WIDTH = canvas.width / LANE_COUNT;
-                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.8, canvas.height * 0.1);
-                OBSTACLE_HEIGHT = canvas.height * 0.05;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.height * 0.08);
+                OBSTACLE_HEIGHT = canvas.height * 0.1;
+                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
                 player.y = canvas.height - PLAYER_SIZE * 1.5;
             } else {
                 // Portrait orientation
                 LANE_WIDTH = canvas.width / LANE_COUNT;
-                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.8, canvas.width * 0.1);
-                OBSTACLE_HEIGHT = canvas.width * 0.05;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.width * 0.08);
+                OBSTACLE_HEIGHT = canvas.width * 0.1;
+                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
                 player.y = canvas.height - PLAYER_SIZE * 1.5;
             }
             
-            player.width = PLAYER_SIZE;
-            player.height = PLAYER_SIZE;
+            player.radius = PLAYER_SIZE / 2;
         }
 
         function drawPlayer() {
-            ctx.fillStyle = 'blue';
-            ctx.fillRect(player.lane * LANE_WIDTH + (LANE_WIDTH - player.width) / 2, player.y, player.width, player.height);
+            ctx.beginPath();
+            ctx.arc(player.lane * LANE_WIDTH + LANE_WIDTH / 2, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#3498db';
+            ctx.fill();
+            ctx.strokeStyle = '#2980b9';
+            ctx.lineWidth = 3;
+            ctx.stroke();
         }
 
         function drawObstacles() {
             obstacles.forEach(obstacle => {
-                ctx.fillStyle = 'red';
-                ctx.fillRect(obstacle.lane * LANE_WIDTH, obstacle.y, LANE_WIDTH, OBSTACLE_HEIGHT);
+                ctx.fillStyle = obstacle.color;
+                ctx.beginPath();
+                ctx.moveTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH - OBSTACLE_WIDTH) / 2, obstacle.y);
+                ctx.lineTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH + OBSTACLE_WIDTH) / 2, obstacle.y);
+                ctx.lineTo(obstacle.lane * LANE_WIDTH + LANE_WIDTH / 2, obstacle.y + OBSTACLE_HEIGHT);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
             });
         }
 
@@ -87,7 +114,8 @@
                 const lane = Math.floor(Math.random() * LANE_COUNT);
                 obstacles.push({
                     lane: lane,
-                    y: -OBSTACLE_HEIGHT
+                    y: -OBSTACLE_HEIGHT,
+                    color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
                 });
             }
         }
@@ -96,8 +124,8 @@
             for (let obstacle of obstacles) {
                 if (
                     player.lane === obstacle.lane &&
-                    player.y < obstacle.y + OBSTACLE_HEIGHT &&
-                    player.y + player.height > obstacle.y
+                    player.y - player.radius < obstacle.y + OBSTACLE_HEIGHT &&
+                    player.y + player.radius > obstacle.y
                 ) {
                     return true;
                 }
@@ -106,6 +134,8 @@
         }
 
         function updateGame() {
+            if (isGameOver) return;
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             drawPlayer();
@@ -137,6 +167,7 @@
         }
 
         function gameOver() {
+            isGameOver = true;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
@@ -144,9 +175,9 @@
             ctx.font = `${Math.max(canvas.width, canvas.height) * 0.05}px Arial`;
             ctx.textAlign = 'center';
             ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
-            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
-            ctx.fillText('Tap or Press Space to Restart', canvas.width / 2, canvas.height / 2 + 40);
             ctx.textAlign = 'left';
+
+            restartButton.style.display = 'block';
         }
 
         function resetGame() {
@@ -154,28 +185,30 @@
             obstacles = [];
             score = 0;
             level = 1;
-            gameSpeed = 2;
+            gameSpeed = 10;
             objectsEvaded = 0;
+            isGameOver = false;
+            restartButton.style.display = 'none';
             updateGame();
         }
 
         function handleInput(x) {
+            if (isGameOver) return;
             const laneWidth = canvas.width / LANE_COUNT;
-            player.lane = Math.floor(x / laneWidth);
+            const newLane = Math.floor(x / laneWidth);
+            if (Math.abs(newLane - player.lane) <= 1) {
+                player.lane = newLane;
+            }
         }
 
         document.addEventListener('keydown', (event) => {
+            if (isGameOver) return;
             switch(event.key) {
                 case 'ArrowLeft':
                     player.lane = Math.max(0, player.lane - 1);
                     break;
                 case 'ArrowRight':
                     player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
-                    break;
-                case ' ':
-                    if (checkCollision()) {
-                        resetGame();
-                    }
                     break;
             }
         });
@@ -189,6 +222,8 @@
         canvas.addEventListener('mousedown', (event) => {
             handleInput(event.clientX);
         });
+
+        restartButton.addEventListener('click', resetGame);
 
         window.addEventListener('resize', resizeCanvas);
 
