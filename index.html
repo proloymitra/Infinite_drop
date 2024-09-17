@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sphere Runner Game</title>
+    <title>Four-Lane Block Game</title>
     <style>
         body, html {
             margin: 0;
@@ -12,223 +12,332 @@
             height: 100%;
             overflow: hidden;
         }
-        #gameCanvas {
-            display: block;
-            touch-action: none;
+        #gameContainer {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
-        #restartButton {
-            position: absolute;
-            left: 50%;
-            top: 60%;
-            transform: translate(-50%, -50%);
-            font-size: 20px;
-            padding: 10px 20px;
+        canvas {
+            border: 1px solid black;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        #gameOver {
             display: none;
+            text-align: center;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #mobileControls {
+            display: none;
+            width: 100%;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+        #mobileControls button, #gameOver button {
+            font-size: 24px;
+            padding: 10px 20px;
+            margin: 5px;
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <button id="restartButton">Restart Game</button>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="mobileControls">
+            <button id="leftButton">←</button>
+            <button id="rightButton">→</button>
+        </div>
+    </div>
+    <div id="gameOver">
+        <h2>Game Over</h2>
+        <p>Score: <span id="finalScore"></span></p>
+        <p>Level: <span id="finalLevel"></span></p>
+        <button onclick="restartGame()">Restart Game</button>
+        <button onclick="exitGame()">Exit Game</button>
+    </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const restartButton = document.getElementById('restartButton');
+        const gameContainer = document.getElementById('gameContainer');
+        const mobileControls = document.getElementById('mobileControls');
 
-        const LANE_COUNT = 3;
-        let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT, OBSTACLE_WIDTH;
+        let player, obstacles, powerUps, score, level, speed, gameLoop, powerUpTimer, obstacleTimer;
+        let gameWidth, gameHeight, laneWidth;
+        const LANES = 4;
+        const BLOCK_SIZE = 60; // Fixed size for obstacles
+        const GAP_SIZE = 20; // Size of the gap between obstacles
+        let speedMultiplier = 1;
 
-        let player = {
-            lane: 1,
-            y: 0,
-            radius: 0
-        };
+        function resizeGame() {
+            const containerWidth = gameContainer.clientWidth;
+            const containerHeight = gameContainer.clientHeight;
+            const aspectRatio = window.innerWidth > window.innerHeight ? 4/3 : 3/4;
 
-        let obstacles = [];
-        let score = 0;
-        let level = 1;
-        let gameSpeed = 2; // Changed initial game speed to 2
-        let objectsEvaded = 0;
-        let isGameOver = false;
-
-        const obstacleColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
-
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            if (canvas.width > canvas.height) {
-                // Landscape orientation
-                LANE_WIDTH = canvas.width / LANE_COUNT;
-                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.height * 0.08);
-                OBSTACLE_HEIGHT = canvas.height * 0.1;
-                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
-                player.y = canvas.height - PLAYER_SIZE * 1.5;
+            if (containerWidth / containerHeight > aspectRatio) {
+                gameHeight = containerHeight;
+                gameWidth = gameHeight * aspectRatio;
             } else {
-                // Portrait orientation
-                LANE_WIDTH = canvas.width / LANE_COUNT;
-                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.4, canvas.width * 0.08);
-                OBSTACLE_HEIGHT = canvas.width * 0.1;
-                OBSTACLE_WIDTH = LANE_WIDTH * 0.8;
-                player.y = canvas.height - PLAYER_SIZE * 1.5;
+                gameWidth = containerWidth;
+                gameHeight = gameWidth / aspectRatio;
             }
-            
-            player.radius = PLAYER_SIZE / 2;
+
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+
+            laneWidth = gameWidth / LANES;
+
+            // Adjust player size and position
+            player.width = laneWidth * 0.8;
+            player.height = gameHeight * 0.05;
+            player.y = gameHeight - player.height - gameHeight * 0.05;
+
+            // Show mobile controls on touch devices
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                mobileControls.style.display = 'flex';
+            }
+        }
+
+        function initGame() {
+            player = { x: 0, y: 0, width: 0, height: 0, lane: 1 };
+            obstacles = [];
+            powerUps = [];
+            score = 0;
+            level = 1;
+            speed = 2;
+            speedMultiplier = 1;
+
+            resizeGame();
+            player.x = (laneWidth - player.width) / 2;
         }
 
         function drawPlayer() {
-            ctx.beginPath();
-            ctx.arc(player.lane * LANE_WIDTH + LANE_WIDTH / 2, player.y, player.radius, 0, Math.PI * 2);
-            ctx.fillStyle = '#3498db';
-            ctx.fill();
-            ctx.strokeStyle = '#2980b9';
-            ctx.lineWidth = 3;
-            ctx.stroke();
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
         }
 
         function drawObstacles() {
             obstacles.forEach(obstacle => {
                 ctx.fillStyle = obstacle.color;
-                ctx.beginPath();
-                ctx.moveTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH - OBSTACLE_WIDTH) / 2, obstacle.y);
-                ctx.lineTo(obstacle.lane * LANE_WIDTH + (LANE_WIDTH + OBSTACLE_WIDTH) / 2, obstacle.y);
-                ctx.lineTo(obstacle.lane * LANE_WIDTH + LANE_WIDTH / 2, obstacle.y + OBSTACLE_HEIGHT);
-                ctx.closePath();
-                ctx.fill();
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+                ctx.fillRect(obstacle.x, obstacle.y, BLOCK_SIZE, BLOCK_SIZE);
             });
+        }
+
+        function drawPowerUps() {
+            powerUps.forEach(powerUp => {
+                ctx.fillStyle = getPowerUpColor(powerUp.type);
+                ctx.beginPath();
+                ctx.arc(powerUp.x, powerUp.y, laneWidth * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.font = `${laneWidth * 0.2}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(powerUp.type, powerUp.x, powerUp.y);
+            });
+        }
+
+        function getPowerUpColor(type) {
+            switch(type) {
+                case 'S': return 'green';
+                case 'B': return 'yellow';
+                case 'W': return 'red';
+                default: return 'gray';
+            }
         }
 
         function moveObstacles() {
             obstacles.forEach(obstacle => {
-                obstacle.y += gameSpeed;
+                obstacle.y += speed * speedMultiplier * (gameHeight / 400);
             });
-            
-            obstacles = obstacles.filter(obstacle => obstacle.y < canvas.height);
+            obstacles = obstacles.filter(obstacle => obstacle.y < gameHeight);
         }
 
         function createObstacle() {
-            if (obstacles.length === 0 || obstacles[obstacles.length - 1].y > canvas.height * 0.2) {
-                const lane = Math.floor(Math.random() * LANE_COUNT);
+            const availableLanes = [0, 1, 2, 3];
+            const numObstacles = Math.floor(Math.random() * 3) + 1; // 1 to 3 obstacles per row
+            
+            for (let i = 0; i < numObstacles; i++) {
+                if (availableLanes.length === 0) break;
+                
+                const laneIndex = Math.floor(Math.random() * availableLanes.length);
+                const lane = availableLanes[laneIndex];
+                availableLanes.splice(laneIndex, 1);
+                
+                const color = `#${Math.floor(Math.random()*16777215).toString(16)}`;
+                
                 obstacles.push({
-                    lane: lane,
-                    y: -OBSTACLE_HEIGHT,
-                    color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
+                    x: lane * laneWidth + (laneWidth - BLOCK_SIZE) / 2,
+                    y: -BLOCK_SIZE,
+                    color: color
                 });
             }
         }
 
-        function checkCollision() {
+        function createPowerUp() {
+            const type = ['S', 'B', 'W'][Math.floor(Math.random() * 3)];
+            const lane = Math.floor(Math.random() * LANES);
+            powerUps.push({
+                x: lane * laneWidth + laneWidth / 2,
+                y: -laneWidth * 0.15,
+                type: type
+            });
+        }
+
+        function movePowerUps() {
+            powerUps.forEach(powerUp => {
+                powerUp.y += (speed * speedMultiplier / 2) * (gameHeight / 400);
+            });
+            powerUps = powerUps.filter(powerUp => powerUp.y < gameHeight);
+        }
+
+        function checkCollisions() {
+            // Check obstacle collisions
             for (let obstacle of obstacles) {
-                if (
-                    player.lane === obstacle.lane &&
-                    player.y - player.radius < obstacle.y + OBSTACLE_HEIGHT &&
-                    player.y + player.radius > obstacle.y
-                ) {
-                    return true;
+                if (player.x < obstacle.x + BLOCK_SIZE &&
+                    player.x + player.width > obstacle.x &&
+                    player.y < obstacle.y + BLOCK_SIZE &&
+                    player.y + player.height > obstacle.y) {
+                    endGame();
+                    return;
                 }
             }
-            return false;
+
+            // Check power-up collisions
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                let powerUp = powerUps[i];
+                if (player.x < powerUp.x + laneWidth * 0.15 &&
+                    player.x + player.width > powerUp.x - laneWidth * 0.15 &&
+                    player.y < powerUp.y + laneWidth * 0.15 &&
+                    player.y + player.height > powerUp.y - laneWidth * 0.15) {
+                    applyPowerUp(powerUp.type);
+                    powerUps.splice(i, 1);
+                }
+            }
+        }
+
+        function applyPowerUp(type) {
+            switch(type) {
+                case 'S':
+                    speed = Math.max(2, speed - 1);
+                    break;
+                case 'B':
+                    obstacles = [];
+                    speed = 2;
+                    playBeep();
+                    break;
+                case 'W':
+                    speedMultiplier = 5;
+                    setTimeout(() => speedMultiplier = 1, 5000); // Reset after 5 seconds
+                    break;
+            }
+        }
+
+        function playBeep() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz
+            oscillator.connect(audioContext.destination);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.1); // Beep for 100ms
         }
 
         function updateGame() {
-            if (isGameOver) return;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
             
+            // Draw lane dividers
+            ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+            ctx.lineWidth = 2;
+            for (let i = 1; i < LANES; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * laneWidth, 0);
+                ctx.lineTo(i * laneWidth, gameHeight);
+                ctx.stroke();
+            }
+
             drawPlayer();
-            createObstacle();
-            moveObstacles();
             drawObstacles();
-            
-            if (checkCollision()) {
-                gameOver();
-                return;
-            }
-            
-            objectsEvaded += obstacles.filter(obstacle => obstacle.y > player.y).length;
-            obstacles = obstacles.filter(obstacle => obstacle.y <= player.y);
-            
-            if (objectsEvaded >= 10) {
-                level++;
-                objectsEvaded = 0;
-                gameSpeed += 0.5;
-            }
-            
+            drawPowerUps();
+            moveObstacles();
+            movePowerUps();
+            checkCollisions();
+
             score++;
-            
+            level = Math.floor(score / 500) + 1;
+            speed = Math.min(2 + (level - 1) * 0.2, 5); // Slower speed progression
+
             ctx.fillStyle = 'black';
-            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
-            ctx.fillText(`Score: ${score}  Level: ${level}`, 10, 30);
-            
-            requestAnimationFrame(updateGame);
+            ctx.font = `${gameWidth * 0.03}px Arial`;
+            ctx.fillText(`Score: ${score}`, gameWidth * 0.02, gameHeight * 0.05);
+            ctx.fillText(`Level: ${level}`, gameWidth * 0.02, gameHeight * 0.1);
+            ctx.fillText(`Speed: ${(speed * speedMultiplier).toFixed(2)}`, gameWidth * 0.02, gameHeight * 0.15);
         }
 
-        function gameOver() {
-            isGameOver = true;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.fillStyle = 'white';
-            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.05}px Arial`;
-            ctx.textAlign = 'center';
-            ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
-            ctx.textAlign = 'left';
-
-            restartButton.style.display = 'block';
+        function endGame() {
+            clearInterval(gameLoop);
+            clearInterval(powerUpTimer);
+            clearInterval(obstacleTimer);
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('finalLevel').textContent = level;
+            document.getElementById('gameOver').style.display = 'block';
+            canvas.style.display = 'none';
         }
 
-        function resetGame() {
-            player.lane = 1;
-            obstacles = [];
-            score = 0;
-            level = 1;
-            gameSpeed = 2; // Changed restart speed to 2
-            objectsEvaded = 0;
-            isGameOver = false;
-            restartButton.style.display = 'none';
-            updateGame();
+        function restartGame() {
+            initGame();
+            document.getElementById('gameOver').style.display = 'none';
+            canvas.style.display = 'block';
+            startGame();
         }
 
-        function handleInput(x) {
-            if (isGameOver) return;
-            const laneWidth = canvas.width / LANE_COUNT;
-            const newLane = Math.floor(x / laneWidth);
-            if (Math.abs(newLane - player.lane) <= 1) {
-                player.lane = newLane;
+        function exitGame() {
+            window.close();
+        }
+
+        function handleKeyPress(e) {
+            const key = e.key;
+            movePlayer(key);
+        }
+
+        function movePlayer(direction) {
+            if (direction === 'ArrowLeft' && player.lane > 0) {
+                player.lane--;
+            } else if (direction === 'ArrowRight' && player.lane < LANES - 1) {
+                player.lane++;
             }
+            player.x = player.lane * laneWidth + (laneWidth - player.width) / 2;
         }
 
-        document.addEventListener('keydown', (event) => {
-            if (isGameOver) return;
-            switch(event.key) {
-                case 'ArrowLeft':
-                    player.lane = Math.max(0, player.lane - 1);
-                    break;
-                case 'ArrowRight':
-                    player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
-                    break;
-            }
+        function startGame() {
+            gameLoop = setInterval(updateGame, 20);
+            powerUpTimer = setInterval(createPowerUp, 5000);
+            obstacleTimer = setInterval(createObstacle, 1000);
+        }
+
+        window.addEventListener('resize', resizeGame);
+        document.addEventListener('keydown', handleKeyPress);
+
+        // Mobile controls
+        document.getElementById('leftButton').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            movePlayer('ArrowLeft');
+        });
+        document.getElementById('rightButton').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            movePlayer('ArrowRight');
         });
 
-        canvas.addEventListener('touchstart', (event) => {
-            event.preventDefault();
-            const touch = event.touches[0];
-            handleInput(touch.clientX);
-        });
-
-        canvas.addEventListener('mousedown', (event) => {
-            handleInput(event.clientX);
-        });
-
-        restartButton.addEventListener('click', resetGame);
-
-        window.addEventListener('resize', resizeCanvas);
-
-        resizeCanvas();
-        updateGame();
+        initGame();
+        startGame();
     </script>
 </body>
 </html>
