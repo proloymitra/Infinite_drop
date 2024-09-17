@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Infinite Runner Game</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const LANE_COUNT = 3;
+        let LANE_WIDTH, PLAYER_SIZE, OBSTACLE_HEIGHT;
+
+        let player = {
+            lane: 1,
+            y: 0,
+            width: 0,
+            height: 0
+        };
+
+        let obstacles = [];
+        let score = 0;
+        let level = 1;
+        let gameSpeed = 2;
+        let objectsEvaded = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            if (canvas.width > canvas.height) {
+                // Landscape orientation
+                LANE_WIDTH = canvas.width / LANE_COUNT;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.8, canvas.height * 0.1);
+                OBSTACLE_HEIGHT = canvas.height * 0.05;
+                player.y = canvas.height - PLAYER_SIZE * 1.5;
+            } else {
+                // Portrait orientation
+                LANE_WIDTH = canvas.width / LANE_COUNT;
+                PLAYER_SIZE = Math.min(LANE_WIDTH * 0.8, canvas.width * 0.1);
+                OBSTACLE_HEIGHT = canvas.width * 0.05;
+                player.y = canvas.height - PLAYER_SIZE * 1.5;
+            }
+            
+            player.width = PLAYER_SIZE;
+            player.height = PLAYER_SIZE;
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.lane * LANE_WIDTH + (LANE_WIDTH - player.width) / 2, player.y, player.width, player.height);
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(obstacle.lane * LANE_WIDTH, obstacle.y, LANE_WIDTH, OBSTACLE_HEIGHT);
+            });
+        }
+
+        function moveObstacles() {
+            obstacles.forEach(obstacle => {
+                obstacle.y += gameSpeed;
+            });
+            
+            obstacles = obstacles.filter(obstacle => obstacle.y < canvas.height);
+        }
+
+        function createObstacle() {
+            if (obstacles.length === 0 || obstacles[obstacles.length - 1].y > canvas.height * 0.2) {
+                const lane = Math.floor(Math.random() * LANE_COUNT);
+                obstacles.push({
+                    lane: lane,
+                    y: -OBSTACLE_HEIGHT
+                });
+            }
+        }
+
+        function checkCollision() {
+            for (let obstacle of obstacles) {
+                if (
+                    player.lane === obstacle.lane &&
+                    player.y < obstacle.y + OBSTACLE_HEIGHT &&
+                    player.y + player.height > obstacle.y
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function updateGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawPlayer();
+            createObstacle();
+            moveObstacles();
+            drawObstacles();
+            
+            if (checkCollision()) {
+                gameOver();
+                return;
+            }
+            
+            objectsEvaded += obstacles.filter(obstacle => obstacle.y > player.y).length;
+            obstacles = obstacles.filter(obstacle => obstacle.y <= player.y);
+            
+            if (objectsEvaded >= 10) {
+                level++;
+                objectsEvaded = 0;
+                gameSpeed += 0.5;
+            }
+            
+            score++;
+            
+            ctx.fillStyle = 'black';
+            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
+            ctx.fillText(`Score: ${score}  Level: ${level}`, 10, 30);
+            
+            requestAnimationFrame(updateGame);
+        }
+
+        function gameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.05}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
+            ctx.font = `${Math.max(canvas.width, canvas.height) * 0.03}px Arial`;
+            ctx.fillText('Tap or Press Space to Restart', canvas.width / 2, canvas.height / 2 + 40);
+            ctx.textAlign = 'left';
+        }
+
+        function resetGame() {
+            player.lane = 1;
+            obstacles = [];
+            score = 0;
+            level = 1;
+            gameSpeed = 2;
+            objectsEvaded = 0;
+            updateGame();
+        }
+
+        function handleInput(x) {
+            const laneWidth = canvas.width / LANE_COUNT;
+            player.lane = Math.floor(x / laneWidth);
+        }
+
+        document.addEventListener('keydown', (event) => {
+            switch(event.key) {
+                case 'ArrowLeft':
+                    player.lane = Math.max(0, player.lane - 1);
+                    break;
+                case 'ArrowRight':
+                    player.lane = Math.min(LANE_COUNT - 1, player.lane + 1);
+                    break;
+                case ' ':
+                    if (checkCollision()) {
+                        resetGame();
+                    }
+                    break;
+            }
+        });
+
+        canvas.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            const touch = event.touches[0];
+            handleInput(touch.clientX);
+        });
+
+        canvas.addEventListener('mousedown', (event) => {
+            handleInput(event.clientX);
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        resizeCanvas();
+        updateGame();
+    </script>
+</body>
+</html>
